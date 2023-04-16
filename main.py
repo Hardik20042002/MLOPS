@@ -1,71 +1,46 @@
-import pandas as pd 
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor
-import matplotlib.pyplot as plt
-import seaborn as sns
+import tensorflow as tf
+import pandas as pd
 import numpy as np
-# Set random seed
-seed = 42
 
-# Load in the data
-df = pd.read_csv("wine_quality.csv")
+# Load data
+data = pd.read_csv("wine_quality.csv")
 
-# Split into train and test sections
-y = df.pop("quality")
-X_train, X_test, y_train, y_test = train_test_split(df, y, test_size=0.2, random_state=seed)
+# Split into train and test sets
+train_data = data.sample(frac=0.8, random_state=0)
+test_data = data.drop(train_data.index)
 
-# Fit a model on the train section
-regr = RandomForestRegressor(max_depth=4, random_state=seed)
-regr.fit(X_train, y_train)
+# Split the features and target variable
+train_features = train_data.drop(columns=["quality"])
+train_target = train_data["quality"]
+test_features = test_data.drop(columns=["quality"])
+test_target = test_data["quality"]
 
-# Report training set score
-train_score = regr.score(X_train, y_train) * 100
-# Report test set score
-test_score = regr.score(X_test, y_test) * 100
-print(test_score)
-print(train_score)
-# Write scores to a file
-with open("metrics.txt", 'w') as outfile:
-        outfile.write("Training variance explained: %2.1f%%\n" % train_score)
-        outfile.write("Test variance explained: %2.1f%%\n" % test_score)
+# Scale the features
+train_mean = train_features.mean(axis=0)
+train_std = train_features.std(axis=0)
+train_features = (train_features - train_mean) / train_std
+test_features = (test_features - train_mean) / train_std
 
-# Calculate feature importance in random forest
-importances = regr.feature_importances_
-labels = df.columns
-feature_df = pd.DataFrame(list(zip(labels, importances)), columns = ["feature","importance"])
-feature_df = feature_df.sort_values(by='importance', ascending=False,)
+# Build the model
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(64, activation='relu', input_shape=[len(train_features.keys())]),
+    tf.keras.layers.Dense(64, activation='relu'),
+    tf.keras.layers.Dense(1)
+])
 
-# image formatting
-axis_fs = 18 #fontsize
-title_fs = 22 #fontsize
-sns.set(style="whitegrid")
+# Compile the model
+model.compile(loss='mean_squared_error', optimizer=tf.keras.optimizers.RMSprop(0.001), metrics=['mean_absolute_error', 'mean_squared_error'])
 
-ax = sns.barplot(x="importance", y="feature", data=feature_df)
-ax.set_xlabel('Importance',fontsize = axis_fs) 
-ax.set_ylabel('Feature', fontsize = axis_fs)#ylabel
-ax.set_title('Random forest\nfeature importance', fontsize = title_fs)
+# Train the model
+history = model.fit(train_features, train_target, epochs=100, validation_split=0.2, verbose=0)
 
-plt.tight_layout()
-plt.savefig("feature_importance.png",dpi=120) 
-plt.close()
+# Evaluate the model on the test set
+test_loss, test_mae, test_mse = model.evaluate(test_features, test_target, verbose=0)
 
-y_pred = regr.predict(X_test) + np.random.normal(0,0.25,len(y_test))
-y_jitter = y_test + np.random.normal(0,0.25,len(y_test))
-res_df = pd.DataFrame(list(zip(y_jitter,y_pred)), columns = ["true","pred"])
+# Make predictions on the test set
+predictions = model.predict(test_features).flatten()
 
-ax = sns.scatterplot(x="true", y="pred",data=res_df)
-ax.set_aspect('equal')
-ax.set_xlabel('True wine quality',fontsize = axis_fs) 
-ax.set_ylabel('Predicted wine quality', fontsize = axis_fs)#ylabel
-ax.set_title('Residuals', fontsize = title_fs)
+# Calculate the mean absolute error
+mae = np.mean(np.abs(predictions - test_target))
 
-# Make it pretty square aspect ratio
-ax.plot([1, 10], [1, 10], 'black', linewidth=1)
-plt.ylim((2.5,8.5))
-plt.xlim((2.5,8.5))
-
-plt.tight_layout()
-plt.savefig("residuals.png",dpi=120) 
-print("completed")
-print("TESTING")
-print("deployment")
+print("Test Mean Absolute Error: {:.2f} Quality points".format(mae))
