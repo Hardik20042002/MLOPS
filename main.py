@@ -42,5 +42,6 @@ predictions = model.predict(test_features).flatten()
 
 # Calculate the mean absolute error
 mae = np.mean(np.abs(predictions - test_target))
-
+with open("output.txt", 'w') as outfile:
+        outfile.write("Mean Absolute Error: %2.1f%%\n" % mae)
 print("Test Mean Absolute Error: {:.2f} Quality points".format(mae))
